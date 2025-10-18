@@ -9,20 +9,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
-- [ ] Implement secure credential storage (Windows Credential Manager / Azure Key Vault)
-- [ ] Add privilege validation before operations
-- [ ] Harden file system permissions
-- [ ] Enable log integrity protection with HMAC
-- [ ] Implement input validation and sanitization
-
-### Planned
+### In Progress (v1.2.0)
+- [ ] Complete all phases in Enhanced version
 - [ ] Add Pester-based unit tests
 - [ ] Implement parallel CA processing (PowerShell 7+)
 - [ ] Add certificate chain validation enhancements
+
+### Planned (v1.3.0+)
 - [ ] SIEM integration (Splunk, Azure Sentinel)
 - [ ] REST API wrapper for CI/CD integration
 - [ ] Web-based UI for non-PowerShell users
+
+---
+
+## [1.1.0-alpha] - 2025-10-18
+
+### Added - Security Hardening (Phase 1 Complete)
+
+#### New Components
+- **PKI-Security.psm1** - Comprehensive security module (800+ lines)
+  - Secure credential storage (Windows Credential Manager + Azure Key Vault)
+  - Privilege validation (Local Admin, Enterprise Admin, CA Admin)
+  - File permission hardening (SYSTEM + Administrators only)
+  - HMAC-protected logging with tamper detection
+  - Input validation (path, filename, CA name sanitization)
+  
+- **Setup Scripts**
+  - `Setup-PKICredentials.ps1` - One-time credential configuration wizard
+  - `Test-PKIReadiness.ps1` - 10-point pre-flight validation
+  - `Test-CAHealth.ps1` - Comprehensive CA health monitoring
+  
+- **PKI-Consolidation-Enhanced.ps1** - Security-hardened version
+  - Integrates all security module features
+  - HMAC-protected session logging
+  - Automated rollback on service health check failure
+  - Enhanced error handling throughout
+  - Health check and log integrity verification in menu
+  
+- **EVOLUTION-ROADMAP.md** - Detailed 12-18 month development plan
+  - 5 evolution phases with effort estimates
+  - Success metrics and KPIs
+  - Community engagement strategy
+
+#### Security Improvements
+✅ **Eliminated critical security risks:**
+- T1 - Credential Exposure: MITIGATED (secure storage implemented)
+- T2 - Unauthorized Registry Modification: MITIGATED (guarded mode + validation)
+- T3 - Privilege Escalation: MITIGATED (privilege validation)
+- T4 - Audit Trail Tampering: MITIGATED (HMAC protection)
+- T5 - Service Restart Risk: MITIGATED (health checks + auto-rollback)
+
+### Changed
+- Enhanced logging with structured JSON format
+- Improved error messages with actionable guidance
+- Better progress indicators and colored output
+
+### Documentation
+- Updated README with setup instructions for enhanced version
+- Added security setup requirements
+- Included version comparison guide
 
 ---
 

@@ -28,24 +28,46 @@ The PKI-Consolidation Tool is a PowerShell-based automation framework for consol
 # Install required modules
 Install-WindowsFeature RSAT-AD-PowerShell, RSAT-ADCS-Mgmt
 Install-Module -Name PSPKI
+Install-Module -Name CredentialManager
 
 # Verify permissions (must be Enterprise Admin)
 whoami /groups | Select-String "Enterprise Admins"
 ```
 
-### Installation
+### Installation & Setup
 
 ```powershell
-# Clone or download the script
-git clone https://github.com/your-org/PKI-Consolidation.git
+# Clone the repository
+git clone https://github.com/adrian207/PKI-Consolidation.git
 cd PKI-Consolidation
 
-# Unblock script
-Unblock-File -Path .\PKI-Consolidation.ps1
+# Unblock scripts
+Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File
 
-# Run with administrator privileges
-.\PKI-Consolidation.ps1
+# IMPORTANT: Configure security (one-time setup)
+.\scripts\Setup-PKICredentials.ps1 -GenerateLogHMACKey
+
+# Validate environment readiness
+.\scripts\Test-PKIReadiness.ps1
+
+# Run the enhanced version (recommended)
+.\PKI-Consolidation-Enhanced.ps1
 ```
+
+### Which Version to Use?
+
+| Version | Security | Use Case |
+|---------|----------|----------|
+| **PKI-Consolidation-Enhanced.ps1** | ✅ **Enhanced** | **Production use (recommended)** |
+| PKI-Consolidation.ps1 | ⚠️ Basic | Testing/legacy only |
+
+The enhanced version includes:
+- 🔒 Secure credential storage (no plaintext API keys)
+- 🔒 HMAC-protected logging with tamper detection  
+- 🔒 Privilege validation before operations
+- 🔒 Input validation and sanitization
+- 🔒 Automated rollback on failures
+- 🔒 File permission hardening
 
 ### Basic Usage
 
