@@ -1,7 +1,8 @@
 # PKI-Consolidation Tool
 
-**Version:** 1.3.0  
-**Status:** ✅ Production Ready - Complete End-to-End Workflow
+**Version:** 1.4.0  
+**Status:** ✅ Production Ready - Enterprise Integration Complete  
+**PowerShell Gallery:** [Install-Module PKI-Consolidation](https://www.powershellgallery.com/packages/PKI-Consolidation)
 
 ---
 
@@ -36,6 +37,27 @@ whoami /groups | Select-String "Enterprise Admins"
 
 ### Installation & Setup
 
+#### Method 1: PowerShell Gallery (Recommended)
+
+```powershell
+# Install from PowerShell Gallery
+Install-Module -Name PKI-Consolidation -Scope CurrentUser
+
+# Import module
+Import-Module PKI-Consolidation
+
+# Configure security (one-time setup)
+Initialize-PKICredentials -GenerateLogHMACKey
+
+# Test readiness
+Test-PKIConsolidationReadiness
+
+# Launch tool
+Start-PKIConsolidation
+```
+
+#### Method 2: GitHub (Manual)
+
 ```powershell
 # Clone the repository
 git clone https://github.com/adrian207/PKI-Consolidation.git
@@ -44,13 +66,10 @@ cd PKI-Consolidation
 # Unblock scripts
 Get-ChildItem -Recurse -Filter *.ps1 | Unblock-File
 
-# IMPORTANT: Configure security (one-time setup)
+# Configure security
 .\scripts\Setup-PKICredentials.ps1 -GenerateLogHMACKey
 
-# Validate environment readiness
-.\scripts\Test-PKIReadiness.ps1
-
-# Run the enhanced version (recommended)
+# Run the tool
 .\PKI-Consolidation-Enhanced.ps1
 ```
 
@@ -104,6 +123,8 @@ The tool includes specialized modules for enhanced functionality:
 | **PKI-Security.psm1** | Security hardening | Credential management, HMAC logging, privilege validation, input sanitization |
 | **PKI-Performance.psm1** | Performance optimization | Certificate store caching, parallel processing (PS7+), performance metrics |
 | **PKI-OCSP.psm1** | OCSP validation | Responder health checks, certificate validation, performance monitoring |
+| **PKI-Dashboard.psm1** | Real-time monitoring | Live dashboard, CA health, certificate expiration tracking, auto-refresh |
+| **PKI-Compliance.psm1** | Compliance reporting | NIST 800-53, CIS Benchmarks, automated reports, scheduled scans |
 
 ### Module Usage
 
