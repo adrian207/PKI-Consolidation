@@ -1,0 +1,93 @@
+# PKI-Consolidation .gitignore
+
+# Sensitive operational data - NEVER COMMIT THESE
+config/crl-aia-ocsp.json
+*.pfx
+*.password
+*.key
+*-api-key.txt
+
+# Output directories
+exports/
+reports/
+work/
+backups/
+archives/
+transcripts/
+
+# Logs
+*.log
+*.log.*
+
+# Windows Credential Manager exports
+*.cred
+
+# Registry backups
+*.reg
+
+# Certificate files (may contain sensitive data)
+*.cer
+*.crt
+*.der
+*.p7b
+*.p12
+
+# Certificate requests
+*.req
+*.inf
+
+# PowerShell transcripts
+transcript*.txt
+
+# Temporary files
+*.tmp
+*.temp
+~$*
+
+# Windows system files
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PowerShell module cache
+PSGetModuleInfo.xml
+
+# Environment-specific configs (copy template to create)
+config/local-settings.json
+config/credentials.json
+
+# Test outputs
+test-results/
+coverage/
+
+# Documentation build artifacts
+docs/build/
+docs/_site/
+
+# Backup files
+*.bak
+*.backup
+
+# IDE files
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.directory
+
+# Git conflict files
+*.orig
+
