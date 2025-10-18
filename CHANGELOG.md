@@ -9,15 +9,145 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### In Progress (v1.3.0)
-- [ ] Complete all phases in Enhanced version (4, 4A, 5-9)
+### Planned (v1.4.0+)
 - [ ] SIEM integration (Splunk, Azure Sentinel)
 - [ ] REST API wrapper for CI/CD integration
-
-### Planned (v1.4.0+)
 - [ ] Web-based UI for non-PowerShell users
 - [ ] Certificate lifecycle management dashboard
 - [ ] Automated compliance reporting
+- [ ] PowerShell Gallery publication
+
+---
+
+## [1.3.0] - 2025-10-18
+
+### Added - Complete PKI Consolidation Workflow (Phase 3 Complete)
+
+#### All Remaining Phases Implemented
+- **Phase 4: Accept & Publish Sub-CA Certificates**
+  - Install issued certificates locally (`certreq -accept`)
+  - Publish certificates to AD (NTAuthCA and SubCA containers)
+  - Match certificates to CA inventory
+  - Comprehensive error handling with detailed logging
+  
+- **Phase 4A: Publish CRL/AIA & OCSP Health Check**
+  - Automatic CRL file discovery and publication
+  - CA certificate distribution to AIA locations
+  - Integrated OCSP health checking using PKI-OCSP module
+  - Support for multiple responders per CA
+  - Real-time responder status reporting
+  
+- **Phase 5: Trust Propagation via GPO**
+  - GPO configuration instruction generation
+  - Automated helper script creation (`Deploy-TrustViaGPO.ps1`)
+  - Quick deployment option to Enterprise Root store
+  - Verification command generation
+  - Interactive deployment prompts
+  
+- **Phase 6: Cloud Integrations**
+  - **Azure Key Vault Integration**
+    - Connectivity testing with Get-AzKeyVault
+    - Certificate inventory listing
+    - Authentication status verification
+  - **Keyfactor API Integration**
+    - API connectivity testing
+    - Bearer token authentication
+    - Version information retrieval
+    - Comprehensive error handling
+  
+- **Phase 7: Leaf Certificate Re-issuance Triggers**
+  - Automated client-side renewal script generation (`Trigger-CertificateRenewal.ps1`)
+  - GPO update forcing
+  - Certificate auto-enrollment triggering (certutil -pulse)
+  - Certificate store refresh
+  - Expiration checking and reporting
+  - Phased rollout guidance
+  
+- **Phase 8: Comprehensive Verification Report**
+  - Beautiful HTML report generation
+  - Real-time CA status checking
+  - Summary metrics with visual styling
+  - Progress checklist with pass/fail indicators
+  - Recommended next steps
+  - Browser auto-open option
+  - Professional styling with responsive design
+  
+- **Phase 9: Legacy CA Decommissioning**
+  - Multi-level safety confirmations ("DECOMMISSION" typing required)
+  - Interactive CA selection
+  - AD certificate unpublishing
+  - Automated backup and documentation
+  - Decommissioning record generation
+  - Rollback procedure documentation
+  - 30-day monitoring recommendation
+
+#### Helper Scripts Generated
+- `Deploy-TrustViaGPO.ps1` - GPO deployment helper
+- `Trigger-CertificateRenewal.ps1` - Client-side certificate renewal trigger
+- HTML Verification Reports - Professional status reporting
+
+### Improved
+- **Complete End-to-End Workflow**
+  - Full PKI consolidation from discovery to decommissioning
+  - All 9 phases operational and tested
+  - Seamless integration between phases
+  - Consistent error handling throughout
+  
+- **Enhanced Safety**
+  - Dry-run mode support across all phases
+  - Guarded mode for registry changes
+  - Multi-level confirmations for destructive operations
+  - Comprehensive backup procedures
+  
+- **User Experience**
+  - Interactive prompts with clear instructions
+  - Color-coded output for better readability
+  - Detailed progress logging
+  - Context-sensitive help messages
+  
+- **Documentation**
+  - Auto-generated helper scripts with inline documentation
+  - Decommissioning records with rollback procedures
+  - Verification reports with actionable insights
+
+### Technical Details
+- **Line Count**: 1,430+ lines in main script
+- **Total Project Lines**: 5,000+ lines
+- **Functions**: 25+ phase and utility functions
+- **Error Handling**: Try-catch blocks in all phases
+- **Integration**: Seamless module integration (Security, Performance, OCSP)
+
+### Workflow Diagram
+```
+Phase 1: Audit CAs
+    ↓
+Phase 2: Select Authoritative Root
+    ↓
+Phase 3: Generate Sub-CA CSRs
+    ↓
+Phase 4: Accept & Publish Issued Certificates
+    ↓
+Phase 4A: Publish CRL/AIA & Test OCSP
+    ↓
+Phase 4B: Apply Registry Changes (Guarded Mode)
+    ↓
+Phase 5: Propagate Trust via GPO
+    ↓
+Phase 6: Test Cloud Integrations
+    ↓
+Phase 7: Trigger Certificate Re-enrollment
+    ↓
+Phase 8: Generate Verification Report
+    ↓
+Phase 9: Decommission Legacy CAs (90+ days later)
+```
+
+### User Experience Enhancements
+- All phases now accessible from main menu
+- Progress tracking across session
+- Consistent logging format
+- Clear prerequisite checking
+- Helpful error messages with remediation steps
 
 ---
 
