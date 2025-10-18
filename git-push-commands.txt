@@ -1,0 +1,23 @@
+# Commands to push to GitHub
+# Replace YOUR-USERNAME with your actual GitHub username
+
+# Step 1: Add the remote repository
+cd "C:\Users\adria\OneDrive\Documents\GitHub\PKI-Consolidation"
+git remote add origin https://github.com/YOUR-USERNAME/PKI-Consolidation.git
+
+# Step 2: Verify remote was added
+git remote -v
+
+# Step 3: Rename branch to 'main' (GitHub's default)
+git branch -M main
+
+# Step 4: Push to GitHub
+git push -u origin main
+
+# Alternative: If using SSH (recommended for authentication)
+# git remote add origin git@github.com:YOUR-USERNAME/PKI-Consolidation.git
+# git push -u origin main
+
+# After first push, subsequent pushes are simply:
+# git push
+

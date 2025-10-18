@@ -202,7 +202,7 @@ Write-Log "PKI-Consolidation Tool v1.1.0 started - Session: $Global:SessionID" '
 #====================#
 # UTILITY FUNCTIONS  #
 #====================#
-function Do-Or-Preview {
+function Invoke-OrPreview {
     param([Parameter(Mandatory)][scriptblock]$Action, [string]$Preview = '')
     if ($Global:DoDryRun) {
         Write-Log "[DRYRUN] $Preview" 'INFO'
@@ -285,21 +285,21 @@ function Export-ADCA-Cert {
     }
 }
 
-function Safe-Certutil {
-    param([string[]]$Args,[string]$Desc)
-    Do-Or-Preview -Preview "certutil $($Args -join ' ')" -Action {
+function Invoke-SafeCertutil {
+    param([string[]]$CertutilArgs,[string]$Description)
+    Invoke-OrPreview -Preview "certutil $($CertutilArgs -join ' ')" -Action {
         try {
-            $out = & certutil @Args 2>&1
+            $out = & certutil @CertutilArgs 2>&1
             if ($LASTEXITCODE -eq 0) {
-                Write-Log "$Desc: Success" 'INFO'
+                Write-Log "${Description}: Success" 'INFO'
             }
             else {
-                Write-Log "$Desc: certutil returned exit code $LASTEXITCODE" 'WARN'
+                Write-Log "${Description}: certutil returned exit code $LASTEXITCODE" 'WARN'
             }
             return $out
         }
         catch {
-            Write-Log "$Desc: Failed - $($_.Exception.Message)" 'ERROR'
+            Write-Log "${Description}: Failed - $($_.Exception.Message)" 'ERROR'
             throw
         }
     }
@@ -360,7 +360,7 @@ function Copy-IfLocalPath {
     }
 }
 
-function Ensure-ConfigSkeleton {
+function Initialize-ConfigSkeleton {
     if (-not (Test-Path $Global:GuardedConfigPath)) {
         $sample = @'
 {
@@ -397,7 +397,7 @@ function Ensure-ConfigSkeleton {
 #====================#
 # PHASE 1: AUDIT     #
 #====================#
-function Phase1-Audit {
+function Invoke-Phase1Audit {
     Write-Log "Phase 1 - Discovering Enterprise CAs" 'INFO'
     try {
         $base = Get-PKIServicesDN
@@ -441,7 +441,7 @@ function Phase1-Audit {
 #==============================#
 # PHASE 2: SELECT AUTHORITATIVE#
 #==============================#
-function Phase2-SelectRoot {
+function Invoke-Phase2SelectRoot {
     Write-Log "Phase 2 - Selecting Authoritative Enterprise Root" 'INFO'
     try {
         $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
@@ -473,7 +473,7 @@ function Phase2-SelectRoot {
 #========================================#
 # PHASE 3: GENERATE SUB-CA CSR (INF/REQ) #
 #========================================#
-function Phase3-GenSubCSR {
+function Invoke-Phase3NewSubCSR {
     Write-Log "Phase 3 - Generating Sub-CA CSRs" 'INFO'
     try {
         $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
@@ -483,7 +483,7 @@ function Phase3-GenSubCSR {
 
         foreach ($s in $subs) {
             $subj = ($s.Subject -replace '^Subject:\s*','').Trim()
-            $base = ($s.CA_CN -replace '[^\w\-]','_')
+            $base = ($s.CA_CN -replace '[^\w-]','_')
             
             # Validate filename
             if ($Global:EnableSecureLogging -and (Get-Command Test-SafeFileName -ErrorAction SilentlyContinue)) {
@@ -516,7 +516,7 @@ KeySpec = 2
 CertificateTemplate = SubCA
 "@
             $inf | Out-File -FilePath $infPath -Encoding ascii
-            Do-Or-Preview -Preview "certreq -new $infPath $reqPath" -Action { 
+            Invoke-OrPreview -Preview "certreq -new $infPath $reqPath" -Action { 
                 & certreq -new $infPath $reqPath | Out-Null 
                 if ($LASTEXITCODE -ne 0) {
                     Write-Log "certreq failed for $base with exit code $LASTEXITCODE" 'ERROR'
@@ -551,7 +551,7 @@ function Export-CA-RegBackup {
     try {
         $safeOutFile = Get-SafePath -Path $OutFile
         $key = "HKLM\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration\$CAName"
-        Do-Or-Preview -Preview "reg export `"$key`" `"$safeOutFile`" /y" -Action {
+        Invoke-OrPreview -Preview "reg export `"$key`" `"$safeOutFile`" /y" -Action {
             & reg export "$key" "$safeOutFile" /y | Out-Null
             if ($LASTEXITCODE -ne 0) {
                 throw "reg export failed with exit code $LASTEXITCODE"
@@ -635,10 +635,10 @@ function Build-CA-RegPatch {
     }
 }
 
-function Phase4B-GuardedCRL_AIA_OCSP {
+function Invoke-Phase4BGuardedChanges {
     Write-Log "Phase 4B - Guarded registry change staging for CRL/AIA/OCSP" 'INFO'
     try {
-        Ensure-ConfigSkeleton
+        Initialize-ConfigSkeleton
         if (-not (Test-Path $Global:GuardedConfigPath)) { 
             Write-Log "Config file missing: $Global:GuardedConfigPath" 'ERROR'
             return 
@@ -677,7 +677,7 @@ function Phase4B-GuardedCRL_AIA_OCSP {
             if ($patchPath -and $Global:ApplyGuardedChanges) {
                 # Apply patch
                 Write-Log "Applying registry patch: $patchPath" 'INFO'
-                Do-Or-Preview -Preview "reg import `"$patchPath`"" -Action { 
+                Invoke-OrPreview -Preview "reg import `"$patchPath`"" -Action { 
                     & reg import "$patchPath" | Out-Null 
                     if ($LASTEXITCODE -ne 0) {
                         throw "reg import failed with exit code $LASTEXITCODE"
@@ -687,12 +687,12 @@ function Phase4B-GuardedCRL_AIA_OCSP {
                 
                 # Restart service with health check
                 Write-Log "Restarting CertSvc to pick up changes..." 'INFO'
-                Do-Or-Preview -Preview "Restart-Service CertSvc" -Action { 
+                Invoke-OrPreview -Preview "Restart-Service CertSvc" -Action { 
                     Restart-Service CertSvc -Force -ErrorAction Stop 
                     
                     # Health check after restart
                     Start-Sleep -Seconds 5
-                    $ping = & certutil -ping 2>&1
+                    $null = & certutil -ping 2>&1
                     if ($LASTEXITCODE -eq 0) {
                         Write-Log "CertSvc restarted successfully and responding" 'INFO'
                     }
@@ -763,17 +763,17 @@ function Invoke-Menu {
         $choice = Read-Host "Select option"
         try {
             switch ($choice.ToUpper()) {
-                '1'  { Phase1-Audit }
-                '2'  { Phase2-SelectRoot }
-                '3'  { Phase3-GenSubCSR }
-                #'4'  { Phase4-AcceptAndPublish }
-                #'4A' { Phase4A-PublishCRL_AIA_OCSP }
-                '4B' { Phase4B-GuardedCRL_AIA_OCSP }
-                #'5'  { Phase5-TrustPropagation }
-                #'6'  { Phase6-CloudIntegrations }
-                #'7'  { Phase7-LeafReissue }
-                #'8'  { Phase8-Verify }
-                #'9'  { Phase9-DecommissionLegacy }
+                '1'  { Invoke-Phase1Audit }
+                '2'  { Invoke-Phase2SelectRoot }
+                '3'  { Invoke-Phase3NewSubCSR }
+                #'4'  { Invoke-Phase4AcceptAndPublish }
+                #'4A' { Invoke-Phase4APublishChanges }
+                '4B' { Invoke-Phase4BGuardedChanges }
+                #'5'  { Invoke-Phase5TrustPropagation }
+                #'6'  { Invoke-Phase6CloudIntegrations }
+                #'7'  { Invoke-Phase7LeafReissue }
+                #'8'  { Invoke-Phase8Verify }
+                #'9'  { Invoke-Phase9DecommissionLegacy }
                 'D'  { $Global:DoDryRun = -not $Global:DoDryRun; Write-Log "DryRun toggled to $($Global:DoDryRun)" 'INFO' }
                 'G'  { $Global:GuardedMode = -not $Global:GuardedMode; Write-Log "GuardedMode toggled to $($Global:GuardedMode)" 'INFO' }
                 'A'  { $Global:ApplyGuardedChanges = -not $Global:ApplyGuardedChanges; Write-Log "ApplyGuardedChanges toggled to $($Global:ApplyGuardedChanges)" 'INFO' }

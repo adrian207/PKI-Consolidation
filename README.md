@@ -83,6 +83,59 @@ The enhanced version includes:
 
 ---
 
+## Modules
+
+The tool includes specialized modules for enhanced functionality:
+
+| Module | Purpose | Key Features |
+|--------|---------|--------------|
+| **PKI-Security.psm1** | Security hardening | Credential management, HMAC logging, privilege validation, input sanitization |
+| **PKI-Performance.psm1** | Performance optimization | Certificate store caching, parallel processing (PS7+), performance metrics |
+| **PKI-OCSP.psm1** | OCSP validation | Responder health checks, certificate validation, performance monitoring |
+
+### Module Usage
+
+```powershell
+# Import modules individually
+Import-Module .\modules\PKI-Security.psm1
+Import-Module .\modules\PKI-Performance.psm1
+Import-Module .\modules\PKI-OCSP.psm1
+
+# Use performance features
+$store = Get-CachedCertStore -StoreName 'Root' -StoreLocation LocalMachine
+
+# Test OCSP responders
+Test-OCSPResponder -ResponderUrl 'http://ocsp.contoso.com/ocsp'
+
+# Parallel CA processing (PowerShell 7+)
+Invoke-ParallelCAProcessing -CAList $caList -ScriptBlock { ... }
+```
+
+---
+
+## Testing
+
+Comprehensive test suite using Pester 5.0+:
+
+```powershell
+# Install Pester (if not already installed)
+Install-Module -Name Pester -MinimumVersion 5.0.0
+
+# Run all tests
+cd tests
+.\Invoke-AllTests.ps1
+
+# Run with code coverage
+.\Invoke-AllTests.ps1 -CodeCoverage
+
+# Run specific test file
+Invoke-Pester -Path .\PKI-Security.Tests.ps1
+```
+
+See [tests/README.md](tests/README.md) for detailed testing documentation.
+
+---
+
 ## Documentation
 
 | Document | Description |
@@ -91,6 +144,8 @@ The enhanced version includes:
 | [DEPLOYMENT-GUIDE.md](docs/DEPLOYMENT-GUIDE.md) | Step-by-step deployment procedures |
 | [SECURITY-HARDENING.md](docs/SECURITY-HARDENING.md) | Security configuration and best practices |
 | [OPERATIONAL-GUIDE.md](docs/OPERATIONAL-GUIDE.md) | Day-to-day operational procedures |
+| [tests/README.md](tests/README.md) | Test suite documentation and CI/CD integration |
+| [EVOLUTION-ROADMAP.md](EVOLUTION-ROADMAP.md) | Development roadmap and future enhancements |
 
 ---
 

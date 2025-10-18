@@ -118,7 +118,7 @@ if ($AzureKeyVaultName) {
     Write-Host "`n  Testing Azure Key Vault connection..." -ForegroundColor Cyan
     try {
         # Test Azure CLI authentication
-        $accountCheck = & az account show 2>&1
+        $null = & az account show 2>&1
         if ($LASTEXITCODE -eq 0) {
             Write-Host "✓ Azure CLI authenticated" -ForegroundColor Green
             Write-Host "  Vault Name: $AzureKeyVaultName" -ForegroundColor Cyan

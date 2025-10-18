@@ -9,16 +9,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### In Progress (v1.2.0)
-- [ ] Complete all phases in Enhanced version
-- [ ] Add Pester-based unit tests
-- [ ] Implement parallel CA processing (PowerShell 7+)
-- [ ] Add certificate chain validation enhancements
-
-### Planned (v1.3.0+)
+### In Progress (v1.3.0)
+- [ ] Complete all phases in Enhanced version (4, 4A, 5-9)
 - [ ] SIEM integration (Splunk, Azure Sentinel)
 - [ ] REST API wrapper for CI/CD integration
+
+### Planned (v1.4.0+)
 - [ ] Web-based UI for non-PowerShell users
+- [ ] Certificate lifecycle management dashboard
+- [ ] Automated compliance reporting
+
+---
+
+## [1.2.0-alpha] - 2025-10-18
+
+### Added - Performance & Testing (Phase 2 Complete)
+
+#### New Modules
+- **PKI-Performance.psm1** - Performance optimization module
+  - Certificate store caching with thread-safe operations
+  - Parallel CA processing (PowerShell 7+ with fallback to sequential)
+  - Performance monitoring and metrics collection
+  - Configurable throttle limits and timeouts
+  - Automatic cache invalidation and cleanup
+  
+- **PKI-OCSP.psm1** - Enhanced OCSP validation module
+  - OCSP responder health checking
+  - Certificate revocation status validation
+  - OCSP URL extraction from certificates
+  - Performance monitoring for OCSP responders
+  - CA OCSP health assessment
+  
+#### Test Suite
+- **Comprehensive Pester 5.0+ test coverage**
+  - `PKI-Security.Tests.ps1` - 30+ tests for security module
+  - `PKI-Performance.Tests.ps1` - 25+ tests for performance features
+  - `PKI-OCSP.Tests.ps1` - 20+ tests for OCSP validation
+  - `Invoke-AllTests.ps1` - Automated test runner with reporting
+  - NUnit/JUnit XML output for CI/CD integration
+  - Code coverage analysis support
+  
+- **Test Documentation**
+  - Comprehensive tests/README.md with examples
+  - CI/CD integration guides (GitHub Actions, Azure DevOps)
+  - Troubleshooting and best practices
+
+#### Enhanced Main Script
+- Fixed regex escaping issue in filename sanitization
+- Renamed functions to follow PowerShell verb-noun conventions:
+  - `Do-Or-Preview` → `Invoke-OrPreview`
+  - `Safe-Certutil` → `Invoke-SafeCertutil`
+  - `Ensure-ConfigSkeleton` → `Initialize-ConfigSkeleton`
+  - `Phase*` functions → `Invoke-Phase*` naming
+
+### Improved
+- **Performance Enhancements**
+  - Certificate store operations now cached (15-minute TTL)
+  - Parallel processing support for multi-CA environments
+  - Performance metrics tracking for all major operations
+  
+- **OCSP Validation**
+  - Comprehensive OCSP responder testing
+  - Response time monitoring
+  - Health check integration with main script
+  - Support for multiple responders per CA
+
+- **Code Quality**
+  - All PowerShell best practices applied
+  - Strict mode enabled in all modules
+  - Consistent error handling patterns
+  - Enhanced documentation strings
+
+### Technical Details
+- **Performance Module Features**
+  - Thread-safe caching with `ReaderWriterLockSlim`
+  - Automatic fallback for PowerShell 5.1 compatibility
+  - Job-based timeout handling for reliability
+  - Configurable cache expiration
+  
+- **OCSP Module Features**
+  - Support for HTTP and HTTPS responders
+  - Timeout configuration for network operations
+  - Statistical analysis of responder performance
+  - Integration with certutil for validation
+  
+- **Test Framework**
+  - 75+ total test cases across all modules
+  - Mock support for external dependencies
+  - TestDrive for isolated file operations
+  - Platform-specific test skipping
+
+### Documentation
+- Added comprehensive test suite documentation
+- Performance optimization guidance
+- OCSP troubleshooting procedures
+- CI/CD pipeline examples
+
+### Dependencies
+- Pester 5.0+ (for testing, optional at runtime)
+- PowerShell 5.1+ (7.0+ recommended for parallel features)
 
 ---
 
