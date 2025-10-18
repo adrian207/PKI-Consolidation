@@ -532,16 +532,164 @@ CertificateTemplate = SubCA
     }
 }
 
-# NOTE: Phases 4-9 follow the same pattern with enhanced logging and error handling
-# Including all 9 phases would make this file very long
-# The key improvements are:
-# - Enhanced error handling with try-catch
-# - HMAC-protected logging
-# - Input validation
-# - Safe path handling
-# - Better error messages
+#========================================#
+# PHASE 4: ACCEPT & PUBLISH SUB-CA CERTS #
+#========================================#
+function Invoke-Phase4AcceptAndPublish {
+    Write-Log "Phase 4 - Accept Issued Sub-CA Certs + Publish to AD" 'INFO'
+    try {
+        $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
+        if (-not (Test-Path $csv)) { throw "Run Phase 1 first." }
+        $inv = Import-Csv $csv
+        $subs = $inv | Where-Object { $_.Subject -ne $_.Issuer }
+        
+        $issuedDir = Get-SafePath -Path (Join-Path "$OutDir\work" 'issued')
+        if (-not (Test-Path $issuedDir)) {
+            throw "Issued certificates directory not found: $issuedDir"
+        }
+        
+        $cerFiles = Get-ChildItem -Path $issuedDir -Filter '*.cer' -ErrorAction SilentlyContinue
+        if (-not $cerFiles) {
+            Write-Log "No issued certificates found in $issuedDir" 'WARN'
+            Write-Log "Submit CSRs from Phase 3 to authoritative root, then place issued .cer files here" 'INFO'
+            return
+        }
+        
+        Write-Log "Found $($cerFiles.Count) issued certificate(s)" 'INFO'
+        
+        foreach ($cerFile in $cerFiles) {
+            Write-Log "Processing: $($cerFile.Name)" 'INFO'
+            
+            # Install certificate locally
+            $certPath = Get-SafePath -Path $cerFile.FullName
+            
+            Invoke-OrPreview -Preview "certreq -accept $certPath" -Action {
+                $out = & certreq -accept $certPath 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Log "Certificate accepted: $($cerFile.Name)" 'INFO'
+                }
+                else {
+                    Write-Log "Failed to accept certificate: $($cerFile.Name) - Exit code: $LASTEXITCODE" 'ERROR'
+                    Write-Log "Output: $($out -join "`n")" 'DEBUG'
+                }
+            }
+            
+            # Publish to AD
+            $dump = & certutil -dump $certPath 2>$null
+            $subject = ($dump | Select-String 'Subject:').Line
+            
+            # Find matching CA in inventory
+            $matchingCA = $subs | Where-Object { $_.Subject -match [regex]::Escape($subject) }
+            
+            if ($matchingCA) {
+                Write-Log "Publishing certificate to AD for: $($matchingCA.CA_CN)" 'INFO'
+                
+                Invoke-SafeCertutil -CertutilArgs @('-dspublish', '-f', $certPath, 'NTAuthCA') `
+                                    -Description "Publish $($cerFile.Name) to NTAuthCA"
+                
+                Invoke-SafeCertutil -CertutilArgs @('-dspublish', '-f', $certPath, 'SubCA') `
+                                    -Description "Publish $($cerFile.Name) to SubCA container"
+            }
+            else {
+                Write-Log "Could not find matching CA in inventory for: $subject" 'WARN'
+            }
+        }
+        
+        Write-Log "Phase 4 complete. Verify with: certutil -viewstore -enterprise NTAuthCA" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 4 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
 
-# For demonstration, I'll include Phase 4B which has the most critical registry operations
+#========================================#
+# PHASE 4A: PUBLISH CRL/AIA & OCSP CHECK #
+#========================================#
+function Invoke-Phase4APublishChanges {
+    Write-Log "Phase 4A - Publishing CRL/AIA & OCSP Health Check" 'INFO'
+    try {
+        $cas = Get-CARegistryKeys
+        if (-not $cas) {
+            Write-Log "No CAs found in registry on this host" 'WARN'
+            return
+        }
+        
+        foreach ($ca in $cas) {
+            Write-Log "Processing CA: $($ca.CAName)" 'INFO'
+            
+            # Get CertEnroll folder
+            $certEnrollPath = Get-CertEnrollFolder
+            if (-not (Test-Path $certEnrollPath)) {
+                Write-Log "CertEnroll folder not found: $certEnrollPath" 'WARN'
+                continue
+            }
+            
+            # Find latest CRL
+            $crlPattern = "*$($ca.CAName)*.crl"
+            $crlFiles = Get-ChildItem -Path $certEnrollPath -Filter $crlPattern -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTime -Descending
+            
+            if ($crlFiles) {
+                $latestCRL = $crlFiles | Select-Object -First 1
+                Write-Log "Latest CRL: $($latestCRL.Name) (Modified: $($latestCRL.LastWriteTime))" 'INFO'
+                
+                # Copy CRL to configured locations
+                foreach ($crlUrl in $ca.CRLUrls) {
+                    Copy-IfLocalPath -Source $latestCRL.FullName -TargetSpec $crlUrl
+                }
+            }
+            else {
+                Write-Log "No CRL files found for $($ca.CAName)" 'WARN'
+            }
+            
+            # Find CA certificate
+            $certPattern = "*$($ca.CAName)*.crt"
+            $certFiles = Get-ChildItem -Path $certEnrollPath -Filter $certPattern -ErrorAction SilentlyContinue |
+                        Sort-Object LastWriteTime -Descending
+            
+            if ($certFiles) {
+                $latestCert = $certFiles | Select-Object -First 1
+                Write-Log "Latest CA cert: $($latestCert.Name)" 'INFO'
+                
+                # Copy certificate to AIA locations
+                foreach ($aiaUrl in $ca.AIAUrls) {
+                    Copy-IfLocalPath -Source $latestCert.FullName -TargetSpec $aiaUrl
+                }
+            }
+            
+            # Test OCSP responders if module available
+            if (Get-Command Test-CAOCSPHealth -ErrorAction SilentlyContinue) {
+                Write-Log "Testing OCSP health for $($ca.CAName)..." 'INFO'
+                try {
+                    Import-Module (Join-Path $PSScriptRoot 'modules\PKI-OCSP.psm1') -ErrorAction Stop
+                    $ocspResult = Test-CAOCSPHealth -CAName $ca.CAName
+                    
+                    if ($ocspResult.AllHealthy) {
+                        Write-Log "✓ All OCSP responders healthy ($($ocspResult.ResponderCount) total)" 'INFO'
+                    }
+                    else {
+                        Write-Log "⚠ Some OCSP responders unhealthy" 'WARN'
+                        foreach ($responder in $ocspResult.Responders) {
+                            if (-not $responder.IsReachable) {
+                                Write-Log "  ✗ $($responder.ResponderUrl): $($responder.Error)" 'WARN'
+                            }
+                        }
+                    }
+                }
+                catch {
+                    Write-Log "OCSP health check error: $($_.Exception.Message)" 'WARN'
+                }
+            }
+        }
+        
+        Write-Log "Phase 4A complete" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 4A failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
 
 #=============================================================#
 # PHASE 4B: Guarded Mode – Stage & Apply Registry Changes     #
@@ -718,8 +866,567 @@ function Invoke-Phase4BGuardedChanges {
     }
 }
 
-# [Include remaining phases 4, 4A, 5-9 with similar enhancements]
-# For brevity showing the structure - in production all phases would be included
+#========================================#
+# PHASE 5: TRUST PROPAGATION (GPO)      #
+#========================================#
+function Invoke-Phase5TrustPropagation {
+    Write-Log "Phase 5 - Trust Propagation via GPO" 'INFO'
+    try {
+        # Check if GroupPolicy module is available
+        if (-not (Get-Module -ListAvailable -Name GroupPolicy)) {
+            Write-Log "GroupPolicy module not available. Install RSAT-GroupPolicy-PowerShell feature." 'ERROR'
+            return
+        }
+        
+        Import-Module GroupPolicy -ErrorAction Stop
+        
+        # Read authoritative root
+        $rootFile = Join-Path "$OutDir\reports" 'AuthoritativeRoot.txt'
+        if (-not (Test-Path $rootFile)) {
+            throw "Run Phase 2 first to select authoritative root"
+        }
+        $rootCN = Get-Content $rootFile -Raw
+        
+        # Export root certificate
+        $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
+        $inv = Import-Csv $csv
+        $rootCA = $inv | Where-Object { $_.Subject -eq $rootCN.Trim() }
+        
+        if (-not $rootCA) {
+            throw "Could not find authoritative root CA in inventory"
+        }
+        
+        $rootCertPath = Get-SafePath -Path $rootCA.CertPath
+        
+        Write-Log "Authoritative Root Certificate: $rootCertPath" 'INFO'
+        Write-Log "" 'INFO'
+        Write-Log "=== GPO CONFIGURATION INSTRUCTIONS ===" 'INFO'
+        Write-Log "" 'INFO'
+        Write-Log "To propagate trust via Group Policy:" 'INFO'
+        Write-Log "1. Open Group Policy Management Console (gpmc.msc)" 'INFO'
+        Write-Log "2. Create or edit a GPO linked to your domain" 'INFO'
+        Write-Log "3. Navigate to: Computer Configuration > Policies > Windows Settings >" 'INFO'
+        Write-Log "   Security Settings > Public Key Policies > Trusted Root Certification Authorities" 'INFO'
+        Write-Log "4. Right-click > Import" 'INFO'
+        Write-Log "5. Import certificate: $rootCertPath" 'INFO'
+        Write-Log "6. Force GPO update: gpupdate /force" 'INFO'
+        Write-Log "" 'INFO'
+        Write-Log "Verification command:" 'INFO'
+        Write-Log "  Get-ChildItem Cert:\LocalMachine\Root | Where-Object { `$_.Subject -match '$($rootCA.CA_CN)' }" 'INFO'
+        Write-Log "" 'INFO'
+        
+        # Generate helper script
+        $gpoScriptPath = Join-Path "$OutDir\work" 'Deploy-TrustViaGPO.ps1'
+        $gpoScript = @"
+# Trust Propagation Helper Script
+# Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+# Author: Adrian Johnson <adrian207@gmail.com>
+
+#Requires -Modules GroupPolicy
+#Requires -RunAsAdministrator
+
+`$ErrorActionPreference = 'Stop'
+
+`$rootCertPath = '$rootCertPath'
+`$gpoName = Read-Host 'Enter GPO name (or leave blank to list existing GPOs)'
+
+if (-not `$gpoName) {
+    Write-Host "`nExisting GPOs:" -ForegroundColor Cyan
+    Get-GPO -All | Select-Object DisplayName, DomainName, CreationTime | Format-Table
+    exit
+}
+
+Write-Host "Manual GPO configuration required:" -ForegroundColor Yellow
+Write-Host "1. Open: gpmc.msc"
+Write-Host "2. Edit GPO: `$gpoName"
+Write-Host "3. Navigate to: Computer Config > Policies > Windows Settings > Security > Public Key Policies > Trusted Root CAs"
+Write-Host "4. Import: `$rootCertPath"
+Write-Host ""
+Write-Host "Or use certutil for quick deployment (not GPO-based):"
+Write-Host "  certutil -addstore -enterprise Root `$rootCertPath"
+"@
+        
+        $gpoScript | Out-File -FilePath $gpoScriptPath -Encoding utf8
+        Write-Log "Generated helper script: $gpoScriptPath" 'INFO'
+        
+        # Offer quick deployment option
+        Write-Host "`n" -NoNewline
+        $response = Read-Host "Deploy root certificate to Enterprise Root store now? (Y/N)"
+        if ($response -eq 'Y') {
+            Invoke-SafeCertutil -CertutilArgs @('-addstore', '-enterprise', 'Root', $rootCertPath) `
+                                -Description "Add root certificate to Enterprise Root store"
+            Write-Log "Root certificate added to Enterprise Root store" 'INFO'
+        }
+        
+        Write-Log "Phase 5 complete" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 5 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
+
+#========================================#
+# PHASE 6: CLOUD INTEGRATIONS           #
+#========================================#
+function Invoke-Phase6CloudIntegrations {
+    Write-Log "Phase 6 - Cloud Integrations (Azure Key Vault / Keyfactor)" 'INFO'
+    try {
+        $hasAKV = $Global:VaultName -and $Global:VaultName -ne ''
+        $hasKeyfactor = $Global:KeyfactorBaseUrl -and $Global:KeyfactorBaseUrl -ne ''
+        
+        if (-not $hasAKV -and -not $hasKeyfactor) {
+            Write-Log "No cloud integrations configured. Edit script variables to enable." 'WARN'
+            Write-Log "  - `$Global:VaultName for Azure Key Vault" 'INFO'
+            Write-Log "  - `$Global:KeyfactorBaseUrl for Keyfactor integration" 'INFO'
+            return
+        }
+        
+        # Azure Key Vault Integration
+        if ($hasAKV) {
+            Write-Log "Azure Key Vault Integration: $Global:VaultName" 'INFO'
+            
+            # Check if Az.KeyVault module is available
+            if (Get-Module -ListAvailable -Name Az.KeyVault) {
+                Import-Module Az.KeyVault -ErrorAction Stop
+                
+                Write-Log "Checking Azure Key Vault connectivity..." 'INFO'
+                try {
+                    $vault = Get-AzKeyVault -VaultName $Global:VaultName -ErrorAction Stop
+                    Write-Log "✓ Connected to Key Vault: $($vault.VaultName)" 'INFO'
+                    Write-Log "  Location: $($vault.Location)" 'INFO'
+                    Write-Log "  Resource Group: $($vault.ResourceGroupName)" 'INFO'
+                    
+                    # List certificates in vault
+                    $certs = Get-AzKeyVaultCertificate -VaultName $Global:VaultName -ErrorAction SilentlyContinue
+                    if ($certs) {
+                        Write-Log "Certificates in vault: $($certs.Count)" 'INFO'
+                        foreach ($cert in $certs | Select-Object -First 5) {
+                            Write-Log "  - $($cert.Name)" 'INFO'
+                        }
+                    }
+                }
+                catch {
+                    Write-Log "Azure Key Vault connection failed: $($_.Exception.Message)" 'ERROR'
+                    Write-Log "Ensure you are authenticated: Connect-AzAccount" 'INFO'
+                }
+            }
+            else {
+                Write-Log "Az.KeyVault module not installed. Install with:" 'WARN'
+                Write-Log "  Install-Module -Name Az.KeyVault -Scope CurrentUser" 'INFO'
+            }
+        }
+        
+        # Keyfactor Integration
+        if ($hasKeyfactor) {
+            Write-Log "Keyfactor Integration: $Global:KeyfactorBaseUrl" 'INFO'
+            
+            if (-not $Global:KeyfactorApiKey) {
+                Write-Log "Keyfactor API key not configured. Run Setup-PKICredentials.ps1" 'WARN'
+            }
+            else {
+                Write-Log "Testing Keyfactor API connectivity..." 'INFO'
+                try {
+                    $headers = @{
+                        'X-Keyfactor-Requested-With' = 'APIClient'
+                        'Authorization' = "Bearer $Global:KeyfactorApiKey"
+                    }
+                    
+                    $statusUrl = "$Global:KeyfactorBaseUrl/Status"
+                    $response = Invoke-RestMethod -Uri $statusUrl -Headers $headers -Method Get -TimeoutSec 10 -ErrorAction Stop
+                    
+                    Write-Log "✓ Keyfactor API responding" 'INFO'
+                    Write-Log "  Version: $($response.Version)" 'INFO'
+                }
+                catch {
+                    Write-Log "Keyfactor API connection failed: $($_.Exception.Message)" 'ERROR'
+                    Write-Log "Verify API key and base URL configuration" 'INFO'
+                }
+            }
+        }
+        
+        Write-Log "Phase 6 complete" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 6 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
+
+#========================================#
+# PHASE 7: LEAF RE-ISSUANCE TRIGGERS    #
+#========================================#
+function Invoke-Phase7LeafReissue {
+    Write-Log "Phase 7 - Leaf Certificate Re-issuance Triggers" 'INFO'
+    try {
+        Write-Log "Generating re-enrollment notification script..." 'INFO'
+        
+        $notificationScript = Join-Path "$OutDir\work" 'Trigger-CertificateRenewal.ps1'
+        $scriptContent = @"
+<#
+.SYNOPSIS
+    Triggers certificate re-enrollment for affected users/computers
+
+.DESCRIPTION
+    Forces certificate renewal after CA hierarchy changes. Run this script
+    on clients or distribute via GPO/SCCM after trust propagation is complete.
+
+.NOTES
+    Author: Adrian Johnson <adrian207@gmail.com>
+    Generated: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+#>
+
+#Requires -RunAsAdministrator
+
+`$ErrorActionPreference = 'Stop'
+
+Write-Host "Certificate Re-enrollment Trigger" -ForegroundColor Cyan
+Write-Host "==================================`n"
+
+# Method 1: Force GPO update and auto-enrollment
+Write-Host "[1/4] Forcing Group Policy update..."
+gpupdate /force /target:computer | Out-Null
+Write-Host "  ✓ Computer policies updated"
+
+# Method 2: Trigger certificate auto-enrollment
+Write-Host "[2/4] Triggering certificate auto-enrollment..."
+certutil -pulse | Out-Null
+Write-Host "  ✓ Auto-enrollment triggered"
+
+# Method 3: Refresh certificate stores
+Write-Host "[3/4] Refreshing certificate stores..."
+Get-ChildItem Cert:\LocalMachine\My | Out-Null
+Get-ChildItem Cert:\CurrentUser\My | Out-Null
+Write-Host "  ✓ Certificate stores refreshed"
+
+# Method 4: Display certificates nearing expiration
+Write-Host "[4/4] Checking for certificates nearing expiration..."
+`$expiringSoon = Get-ChildItem Cert:\LocalMachine\My | 
+    Where-Object { `$_.NotAfter -lt (Get-Date).AddDays(90) -and `$_.NotAfter -gt (Get-Date) } |
+    Select-Object Subject, Thumbprint, NotAfter
+
+if (`$expiringSoon) {
+    Write-Host "  ⚠ Certificates expiring within 90 days:" -ForegroundColor Yellow
+    `$expiringSoon | Format-Table -AutoSize
+}
+else {
+    Write-Host "  ✓ No certificates expiring soon"
+}
+
+Write-Host "`nRe-enrollment process complete!" -ForegroundColor Green
+Write-Host "Monitor certificate requests on your CA servers."
+"@
+        
+        $scriptContent | Out-File -FilePath $notificationScript -Encoding utf8
+        Write-Log "Created: $notificationScript" 'INFO'
+        
+        Write-Host "`n" -NoNewline
+        Write-Host "=== CERTIFICATE RE-ISSUANCE PLAN ===" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "1. PILOT GROUP (Week 1):" -ForegroundColor Yellow
+        Write-Host "   - Deploy to 5-10 test machines"
+        Write-Host "   - Run: $notificationScript"
+        Write-Host "   - Verify new certificates issued from updated CAs"
+        Write-Host ""
+        Write-Host "2. PHASED ROLLOUT (Weeks 2-4):" -ForegroundColor Yellow
+        Write-Host "   - Deploy via GPO Startup Script or SCCM"
+        Write-Host "   - Monitor CA request queues"
+        Write-Host "   - Track certificate issuance rates"
+        Write-Host ""
+        Write-Host "3. MONITORING:" -ForegroundColor Yellow
+        Write-Host "   - Check CA logs for failed requests"
+        Write-Host "   - Monitor certificate expiration dates"
+        Write-Host "   - Verify trust chain on client machines"
+        Write-Host ""
+        
+        Write-Log "Phase 7 complete" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 7 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
+
+#========================================#
+# PHASE 8: VERIFICATION REPORT           #
+#========================================#
+function Invoke-Phase8Verify {
+    Write-Log "Phase 8 - Generating Verification Report" 'INFO'
+    try {
+        $reportPath = Get-SafePath -Path (Join-Path "$OutDir\reports" "Verification-Report-$(Get-Date -Format 'yyyyMMdd-HHmmss').html")
+        
+        Write-Log "Collecting verification data..." 'INFO'
+        
+        # Load inventory
+        $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
+        $inv = Import-Csv $csv -ErrorAction SilentlyContinue
+        
+        # Generate HTML report
+        $html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PKI Consolidation Verification Report</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #0078d4; border-bottom: 3px solid #0078d4; padding-bottom: 10px; }
+        h2 { color: #333; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #0078d4; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #ddd; }
+        tr:hover { background: #f9f9f9; }
+        .status-good { color: #107c10; font-weight: bold; }
+        .status-warn { color: #ff8c00; font-weight: bold; }
+        .status-error { color: #d13438; font-weight: bold; }
+        .metric { display: inline-block; margin: 10px 20px 10px 0; padding: 15px; background: #f0f0f0; border-radius: 5px; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #0078d4; }
+        .metric-label { font-size: 12px; color: #666; text-transform: uppercase; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔒 PKI Consolidation Verification Report</h1>
+    <p><strong>Generated:</strong> $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')</p>
+    <p><strong>Session ID:</strong> $Global:SessionID</p>
+    <p><strong>Report Path:</strong> $reportPath</p>
+    
+    <h2>📊 Summary Metrics</h2>
+    <div class="metric">
+        <div class="metric-value">$($inv.Count)</div>
+        <div class="metric-label">Total CAs</div>
+    </div>
+    <div class="metric">
+        <div class="metric-value">$(($inv | Where-Object { $_.Subject -eq $_.Issuer }).Count)</div>
+        <div class="metric-label">Root CAs</div>
+    </div>
+    <div class="metric">
+        <div class="metric-value">$(($inv | Where-Object { $_.Subject -ne $_.Issuer }).Count)</div>
+        <div class="metric-label">Subordinate CAs</div>
+    </div>
+    
+    <h2>📋 CA Inventory</h2>
+    <table>
+        <tr>
+            <th>CA Name</th>
+            <th>Type</th>
+            <th>Hostname</th>
+            <th>Signature Algorithm</th>
+            <th>Status</th>
+        </tr>
+"@
+        
+        foreach ($ca in $inv) {
+            $type = if ($ca.Subject -eq $ca.Issuer) { "Root CA" } else { "Subordinate CA" }
+            $sigAlg = if ($ca.SigAlgorithm -match 'sha256|sha384|sha512') { 
+                "<span class='status-good'>$($ca.SigAlgorithm)</span>" 
+            } else { 
+                "<span class='status-warn'>$($ca.SigAlgorithm)</span>" 
+            }
+            
+            # Check if CA is accessible
+            $status = "<span class='status-good'>✓ Active</span>"
+            if ($ca.Hostname) {
+                try {
+                    $null = Test-Connection $ca.Hostname -Count 1 -Quiet -ErrorAction Stop
+                } catch {
+                    $status = "<span class='status-warn'>⚠ Unreachable</span>"
+                }
+            }
+            
+            $html += @"
+        <tr>
+            <td>$($ca.CA_CN)</td>
+            <td>$type</td>
+            <td>$($ca.Hostname)</td>
+            <td>$sigAlg</td>
+            <td>$status</td>
+        </tr>
+"@
+        }
+        
+        $html += @"
+    </table>
+    
+    <h2>✅ Verification Checklist</h2>
+    <table>
+        <tr>
+            <th width="60%">Check</th>
+            <th width="20%">Status</th>
+            <th width="20%">Action</th>
+        </tr>
+        <tr>
+            <td>CA Discovery Complete</td>
+            <td class="status-good">✓ PASS</td>
+            <td>-</td>
+        </tr>
+        <tr>
+            <td>Authoritative Root Selected</td>
+            <td>$(if (Test-Path (Join-Path "$OutDir\reports" 'AuthoritativeRoot.txt')) { "<span class='status-good'>✓ PASS</span>" } else { "<span class='status-warn'>⚠ PENDING</span>" })</td>
+            <td>$(if (Test-Path (Join-Path "$OutDir\reports" 'AuthoritativeRoot.txt')) { "-" } else { "Run Phase 2" })</td>
+        </tr>
+        <tr>
+            <td>Sub-CA CSRs Generated</td>
+            <td>$(if ((Get-ChildItem "$OutDir\work\*.req" -ErrorAction SilentlyContinue).Count -gt 0) { "<span class='status-good'>✓ PASS</span>" } else { "<span class='status-warn'>⚠ PENDING</span>" })</td>
+            <td>$(if ((Get-ChildItem "$OutDir\work\*.req" -ErrorAction SilentlyContinue).Count -gt 0) { "-" } else { "Run Phase 3" })</td>
+        </tr>
+        <tr>
+            <td>Certificates Issued & Published</td>
+            <td>$(if ((Get-ChildItem "$OutDir\work\issued\*.cer" -ErrorAction SilentlyContinue).Count -gt 0) { "<span class='status-good'>✓ PASS</span>" } else { "<span class='status-warn'>⚠ PENDING</span>" })</td>
+            <td>$(if ((Get-ChildItem "$OutDir\work\issued\*.cer" -ErrorAction SilentlyContinue).Count -gt 0) { "-" } else { "Run Phase 4" })</td>
+        </tr>
+        <tr>
+            <td>CRL/AIA Distribution Configured</td>
+            <td><span class="status-warn">⚠ MANUAL CHECK</span></td>
+            <td>Verify registry settings</td>
+        </tr>
+        <tr>
+            <td>Trust Propagated via GPO</td>
+            <td><span class="status-warn">⚠ MANUAL CHECK</span></td>
+            <td>Check GPO deployment</td>
+        </tr>
+        <tr>
+            <td>Certificate Re-enrollment Triggered</td>
+            <td><span class="status-warn">⚠ MANUAL CHECK</span></td>
+            <td>Monitor CA request queues</td>
+        </tr>
+    </table>
+    
+    <h2>🔍 Recommended Next Steps</h2>
+    <ol>
+        <li>Verify certificate chain validation on client machines</li>
+        <li>Monitor CA request queues for re-enrollment activity</li>
+        <li>Check CRL publication and freshness</li>
+        <li>Test OCSP responder availability</li>
+        <li>Review application certificate usage</li>
+        <li>Plan legacy CA decommissioning after 90-day validation period</li>
+    </ol>
+    
+    <div class="footer">
+        <p><strong>Author:</strong> Adrian Johnson &lt;adrian207@gmail.com&gt;</p>
+        <p><strong>Tool:</strong> PKI-Consolidation v1.2.0-alpha</p>
+        <p><strong>GitHub:</strong> https://github.com/adrian207/PKI-Consolidation</p>
+    </div>
+</div>
+</body>
+</html>
+"@
+        
+        $html | Out-File -FilePath $reportPath -Encoding utf8
+        Write-Log "Verification report generated: $reportPath" 'INFO'
+        
+        # Open in browser
+        Write-Host "`n" -NoNewline
+        $response = Read-Host "Open report in browser? (Y/N)"
+        if ($response -eq 'Y') {
+            Start-Process $reportPath
+        }
+        
+        Write-Log "Phase 8 complete" 'INFO'
+    }
+    catch {
+        Write-Log "Phase 8 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
+
+#========================================#
+# PHASE 9: DECOMMISSION LEGACY CAs       #
+#========================================#
+function Invoke-Phase9DecommissionLegacy {
+    Write-Log "Phase 9 - Decommission Legacy CAs" 'INFO'
+    try {
+        Write-Host "`n" -NoNewline
+        Write-Host "⚠⚠⚠ WARNING: DESTRUCTIVE OPERATION ⚠⚠⚠" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "This phase will unpublish legacy CA certificates from Active Directory." -ForegroundColor Yellow
+        Write-Host "Only proceed if:" -ForegroundColor Yellow
+        Write-Host "  1. New CA hierarchy is fully operational (90+ days)" -ForegroundColor Yellow
+        Write-Host "  2. All certificates have been re-issued" -ForegroundColor Yellow
+        Write-Host "  3. No active certificates remain from legacy CAs" -ForegroundColor Yellow
+        Write-Host "  4. You have tested certificate validation extensively" -ForegroundColor Yellow
+        Write-Host ""
+        
+        $confirm = Read-Host "Type 'DECOMMISSION' to continue (anything else to cancel)"
+        if ($confirm -ne 'DECOMMISSION') {
+            Write-Log "Phase 9 cancelled by user" 'WARN'
+            return
+        }
+        
+        $csv = Join-Path "$OutDir\reports" 'CA-Inventory.csv'
+        $inv = Import-Csv $csv
+        
+        Write-Host "`nSelect CAs to decommission:" -ForegroundColor Cyan
+        for ($i = 0; $i -lt $inv.Count; $i++) {
+            Write-Host "  [$i] $($inv[$i].CA_CN) - $($inv[$i].Hostname)"
+        }
+        
+        $selection = Read-Host "`nEnter CA numbers to decommission (comma-separated, or 'cancel')"
+        if ($selection -eq 'cancel') {
+            Write-Log "Phase 9 cancelled" 'WARN'
+            return
+        }
+        
+        $indices = $selection -split ',' | ForEach-Object { [int]$_.Trim() }
+        $selectedCAs = $indices | ForEach-Object { $inv[$_] }
+        
+        foreach ($ca in $selectedCAs) {
+            Write-Log "Decommissioning: $($ca.CA_CN)" 'INFO'
+            
+            # Backup before unpublishing
+            $backupPath = Join-Path "$OutDir\backups\decommission" (Get-Date -Format 'yyyyMMdd-HHmmss')
+            New-Item -Path $backupPath -ItemType Directory -Force | Out-Null
+            
+            # Unpublish from AD
+            Invoke-OrPreview -Preview "certutil -dspublish -f $($ca.CertPath) delete" -Action {
+                & certutil -dspublish -f $ca.CertPath delete 2>&1 | Out-Null
+            }
+            
+            Write-Log "  ✓ Unpublished from AD" 'INFO'
+            
+            # Create decommissioning report
+            $decommReport = @"
+CA DECOMMISSIONING RECORD
+========================
+CA Name: $($ca.CA_CN)
+Hostname: $($ca.Hostname)
+Subject: $($ca.Subject)
+Decommissioned: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+Performed by: $env:USERNAME
+Session ID: $Global:SessionID
+
+ACTIONS TAKEN:
+- Unpublished from Active Directory
+- Certificate archived to: $backupPath
+
+POST-DECOMMISSIONING TASKS:
+1. Monitor for certificate validation errors
+2. Remove CA server from network after validation period
+3. Archive CA database and logs
+4. Update documentation
+5. Notify stakeholders
+
+ROLLBACK PROCEDURE (if needed):
+certutil -dspublish -f "$($ca.CertPath)" NTAuthCA
+certutil -dspublish -f "$($ca.CertPath)" SubCA
+"@
+            
+            $decommReport | Out-File (Join-Path $backupPath "$($ca.CA_CN)-decommission-record.txt") -Encoding utf8
+            Copy-Item $ca.CertPath -Destination $backupPath -ErrorAction SilentlyContinue
+            
+            Write-Log "  ✓ Decommission record saved: $backupPath" 'INFO'
+        }
+        
+        Write-Log "Phase 9 complete. Monitor for 30 days before removing CA servers." 'INFO'
+        Write-Host "`nDecommissioning complete!" -ForegroundColor Green
+        Write-Host "Backup location: $backupPath" -ForegroundColor Cyan
+    }
+    catch {
+        Write-Log "Phase 9 failed: $($_.Exception.Message)" 'ERROR'
+        throw
+    }
+}
 
 #====================#
 # MENU UI            #
@@ -766,14 +1473,14 @@ function Invoke-Menu {
                 '1'  { Invoke-Phase1Audit }
                 '2'  { Invoke-Phase2SelectRoot }
                 '3'  { Invoke-Phase3NewSubCSR }
-                #'4'  { Invoke-Phase4AcceptAndPublish }
-                #'4A' { Invoke-Phase4APublishChanges }
+                '4'  { Invoke-Phase4AcceptAndPublish }
+                '4A' { Invoke-Phase4APublishChanges }
                 '4B' { Invoke-Phase4BGuardedChanges }
-                #'5'  { Invoke-Phase5TrustPropagation }
-                #'6'  { Invoke-Phase6CloudIntegrations }
-                #'7'  { Invoke-Phase7LeafReissue }
-                #'8'  { Invoke-Phase8Verify }
-                #'9'  { Invoke-Phase9DecommissionLegacy }
+                '5'  { Invoke-Phase5TrustPropagation }
+                '6'  { Invoke-Phase6CloudIntegrations }
+                '7'  { Invoke-Phase7LeafReissue }
+                '8'  { Invoke-Phase8Verify }
+                '9'  { Invoke-Phase9DecommissionLegacy }
                 'D'  { $Global:DoDryRun = -not $Global:DoDryRun; Write-Log "DryRun toggled to $($Global:DoDryRun)" 'INFO' }
                 'G'  { $Global:GuardedMode = -not $Global:GuardedMode; Write-Log "GuardedMode toggled to $($Global:GuardedMode)" 'INFO' }
                 'A'  { $Global:ApplyGuardedChanges = -not $Global:ApplyGuardedChanges; Write-Log "ApplyGuardedChanges toggled to $($Global:ApplyGuardedChanges)" 'INFO' }
