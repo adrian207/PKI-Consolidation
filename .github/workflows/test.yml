@@ -1,0 +1,139 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }} - PS ${{ matrix.psversion }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2019, windows-2022]
+        psversion: ['5.1', '7.3']
+        exclude:
+          - os: windows-2019
+            psversion: '7.3'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup PowerShell ${{ matrix.psversion }}
+        if: matrix.psversion != '5.1'
+        uses: actions/setup-powershell@v1
+        with:
+          powershell-version: ${{ matrix.psversion }}
+      
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+      
+      - name: Install Required Modules
+        shell: pwsh
+        run: |
+          # Install PSPKI if available (may fail on GitHub runners)
+          try {
+            Install-Module -Name PSPKI -Force -SkipPublisherCheck -Scope CurrentUser -ErrorAction Stop
+          } catch {
+            Write-Warning "PSPKI not available on this platform"
+          }
+      
+      - name: Display Environment
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell Version: $($PSVersionTable.PSVersion)"
+          Write-Host "OS: $($PSVersionTable.OS)"
+          Get-Module -ListAvailable | Select-Object Name, Version | Format-Table
+      
+      - name: Run Pester Tests
+        shell: pwsh
+        run: |
+          cd tests
+          .\Invoke-AllTests.ps1 -OutputFormat NUnitXml -CodeCoverage
+        continue-on-error: false
+      
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-results-${{ matrix.os }}-ps${{ matrix.psversion }}
+          path: tests/test-results/*.xml
+      
+      - name: Upload Code Coverage
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-${{ matrix.os }}-ps${{ matrix.psversion }}
+          path: tests/test-results/coverage-*.xml
+      
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action/composite@v2
+        if: always() && runner.os == 'Windows'
+        with:
+          files: tests/test-results/*.xml
+          check_name: Test Results (${{ matrix.os }} - PS ${{ matrix.psversion }})
+
+  lint:
+    name: PSScriptAnalyzer
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck -Scope CurrentUser
+      
+      - name: Run PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path . -Recurse -Settings PSGallery -ReportSummary
+          if ($results) {
+            $results | Format-Table -AutoSize
+            Write-Error "PSScriptAnalyzer found issues"
+            exit 1
+          }
+
+  module-validation:
+    name: Module Validation
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Test Module Manifest
+        shell: pwsh
+        run: |
+          $manifestPath = '.\PKI-Consolidation.psd1'
+          
+          Write-Host "Testing module manifest..."
+          $manifest = Test-ModuleManifest -Path $manifestPath -ErrorAction Stop
+          
+          Write-Host "✓ Module manifest is valid"
+          Write-Host "Module Name: $($manifest.Name)"
+          Write-Host "Version: $($manifest.Version)"
+          Write-Host "Author: $($manifest.Author)"
+          Write-Host "Functions: $($manifest.ExportedFunctions.Count)"
+      
+      - name: Test Module Import
+        shell: pwsh
+        run: |
+          Write-Host "Testing module import..."
+          Import-Module .\PKI-Consolidation.psd1 -Force -ErrorAction Stop
+          
+          Write-Host "✓ Module imported successfully"
+          Get-Module PKI-Consolidation | Format-List
+          
+          Write-Host "`nExported Functions:"
+          Get-Command -Module PKI-Consolidation | Format-Table Name, CommandType
+

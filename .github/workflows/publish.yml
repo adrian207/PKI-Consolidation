@@ -1,0 +1,135 @@
+name: Publish to PowerShell Gallery
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.3.0)'
+        required: true
+        type: string
+
+jobs:
+  publish:
+    name: Publish Module
+    runs-on: windows-latest
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Validate Version
+        shell: pwsh
+        run: |
+          if ('${{ github.event.inputs.version }}') {
+            $version = '${{ github.event.inputs.version }}'
+          } else {
+            $version = '${{ github.event.release.tag_name }}' -replace '^v', ''
+          }
+          
+          Write-Host "Publishing version: $version"
+          
+          # Update manifest version
+          $manifestPath = '.\PKI-Consolidation.psd1'
+          $manifest = Import-PowerShellDataFile $manifestPath
+          
+          if ($manifest.ModuleVersion -ne $version) {
+            Write-Host "Updating manifest version from $($manifest.ModuleVersion) to $version"
+            (Get-Content $manifestPath -Raw) -replace "ModuleVersion = '[\d\.]+",  "ModuleVersion = '$version" | Set-Content $manifestPath
+          }
+          
+          # Update module file version
+          $moduleFile = '.\PKI-Consolidation.psm1'
+          (Get-Content $moduleFile -Raw) -replace "\`$script:ModuleVersion = '[\d\.]+'", "`$script:ModuleVersion = '$version'" | Set-Content $moduleFile
+      
+      - name: Run Tests
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck
+          cd tests
+          $results = .\Invoke-AllTests.ps1 -OutputFormat Console
+          
+          if ($results.FailedCount -gt 0) {
+            Write-Error "Tests failed. Cannot publish."
+            exit 1
+          }
+      
+      - name: Validate Module
+        shell: pwsh
+        run: |
+          $manifestPath = '.\PKI-Consolidation.psd1'
+          Test-ModuleManifest -Path $manifestPath -ErrorAction Stop
+          
+          Import-Module $manifestPath -Force -ErrorAction Stop
+          
+          Write-Host "✓ Module validation passed"
+      
+      - name: Publish to PowerShell Gallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) {
+            Write-Error "PowerShell Gallery API key not found. Set PSGALLERY_API_KEY secret."
+            exit 1
+          }
+          
+          Write-Host "Publishing to PowerShell Gallery..."
+          
+          Publish-Module -Path . -NuGetApiKey $env:PSGALLERY_API_KEY -Verbose
+          
+          Write-Host "✓ Module published successfully!"
+      
+      - name: Create GitHub Release Asset
+        if: github.event_name == 'release'
+        shell: pwsh
+        run: |
+          $version = '${{ github.event.release.tag_name }}' -replace '^v', ''
+          $zipName = "PKI-Consolidation-v$version.zip"
+          
+          # Create release package
+          Compress-Archive -Path @(
+            'PKI-Consolidation.psd1',
+            'PKI-Consolidation.psm1',
+            'PKI-Consolidation-Enhanced.ps1',
+            'modules',
+            'scripts',
+            'README.md',
+            'LICENSE',
+            'CHANGELOG.md'
+          ) -DestinationPath $zipName -Force
+          
+          Write-Host "Created release package: $zipName"
+      
+      - name: Upload Release Asset
+        if: github.event_name == 'release'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./PKI-Consolidation-v${{ github.event.release.tag_name }}.zip
+          asset_name: PKI-Consolidation-v${{ github.event.release.tag_name }}.zip
+          asset_content_type: application/zip
+
+  notify:
+    name: Notify
+    needs: [publish]
+    runs-on: windows-latest
+    if: success()
+    
+    steps:
+      - name: Success Notification
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event.inputs.version }}') { 
+            '${{ github.event.inputs.version }}' 
+          } else { 
+            '${{ github.event.release.tag_name }}' -replace '^v', ''
+          }
+          
+          Write-Host "✓ PKI-Consolidation v$version published successfully!"
+          Write-Host "Install with: Install-Module -Name PKI-Consolidation -RequiredVersion $version"
+
