@@ -2,7 +2,9 @@
 
 **Version:** 1.0  
 **Date:** October 18, 2025  
-**Classification:** Confidential
+**Author:** Adrian Johnson <adrian207@gmail.com>  
+**Status:** Production  
+**Classification:** Public
 
 ---
 
@@ -1119,5 +1121,9 @@ Enable-PKISecurity
 **Document Version**: 1.0  
 **Last Updated**: 2025-10-18  
 **Next Review**: 2026-01-18  
-**Classification**: Confidential
+**Author**: Adrian Johnson <adrian207@gmail.com>
+
+---
+
+For security questions or concerns, please contact: **adrian207@gmail.com**
 

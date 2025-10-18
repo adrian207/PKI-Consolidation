@@ -1,7 +1,9 @@
 # PKI-Consolidation Tool - Implementation Checklist
 
 **Version:** 1.0  
-**Date:** October 18, 2025
+**Date:** October 18, 2025  
+**Author:** Adrian Johnson <adrian207@gmail.com>  
+**Status:** Production
 
 ---
 
@@ -447,17 +449,22 @@ Track these monthly:
 - ❌ **Applying registry patches without review**
 - ❌ **Insufficient testing of certificate chains**
 
-### Emergency Contacts
+### Support Contact
 
-| Scenario | Contact | Phone |
-|----------|---------|-------|
-| **CA Service Down** | On-Call Engineer | +1-555-0911 |
-| **Security Incident** | Security Team | +1-555-0200 |
-| **Production Outage** | Incident Manager | +1-555-0999 |
+**Adrian Johnson**  
+Email: adrian207@gmail.com  
+GitHub: [@adrian207](https://github.com/adrian207)
+
+**For assistance:**
+- General questions: GitHub Issues
+- Security issues: adrian207@gmail.com (Subject: "[SECURITY] PKI-Consolidation")
+- Implementation support: adrian207@gmail.com
+- Bug reports: GitHub Issues
 
 ---
 
 **Document Version**: 1.0  
 **Last Updated**: 2025-10-18  
-**Completion Target**: __________
+**Completion Target**: __________  
+**Author**: Adrian Johnson <adrian207@gmail.com>
 

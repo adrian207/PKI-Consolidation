@@ -233,7 +233,8 @@ certutil -pulse
 
 - **Documentation**: See `docs/` directory for comprehensive guides
 - **Issues**: Report bugs via GitHub Issues
-- **Security**: Email security@yourcompany.com for security concerns
+- **Security**: Email adrian207@gmail.com for security concerns
+- **General Inquiries**: adrian207@gmail.com
 
 ---
 
@@ -251,8 +252,9 @@ certutil -pulse
 
 ## License
 
-Copyright (c) 2025 Your Organization  
-Internal Use Only - Confidential
+Copyright (c) 2025 Adrian Johnson <adrian207@gmail.com>
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
@@ -274,12 +276,20 @@ Internal Use Only - Confidential
 
 ---
 
+## Author
+
+**Adrian Johnson**  
+Email: adrian207@gmail.com  
+GitHub: [@adrian207](https://github.com/adrian207)
+
 ## Acknowledgments
 
 Built with guidance from:
-- Microsoft PKI documentation
-- NIST SP 800-57 Key Management Guidelines
-- Community PKI best practices
+- Microsoft PKI documentation and best practices
+- NIST SP 800-57 Key Management Guidelines  
+- RFC 5280: Internet X.509 PKI Certificate and CRL Profile
+- PowerShell community best practices
+- Active Directory Certificate Services community
 
 ---
 

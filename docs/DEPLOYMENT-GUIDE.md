@@ -1,7 +1,9 @@
 # PKI-Consolidation Tool - Deployment Guide
 
 **Version:** 1.0  
-**Date:** October 18, 2025
+**Date:** October 18, 2025  
+**Author:** Adrian Johnson <adrian207@gmail.com>  
+**Status:** Production
 
 ---
 
@@ -1129,5 +1131,10 @@ certutil -pulse
 
 **Document Version**: 1.0  
 **Last Updated**: 2025-10-18  
-**Next Review**: 2026-01-18
+**Next Review**: 2026-01-18  
+**Author**: Adrian Johnson <adrian207@gmail.com>
+
+---
+
+For questions or support, please contact: **adrian207@gmail.com**
 

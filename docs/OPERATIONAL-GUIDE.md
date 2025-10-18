@@ -1,7 +1,9 @@
 # PKI-Consolidation Tool - Operational Guide
 
 **Version:** 1.0  
-**Date:** October 18, 2025
+**Date:** October 18, 2025  
+**Author:** Adrian Johnson <adrian207@gmail.com>  
+**Status:** Production
 
 ---
 
@@ -638,22 +640,26 @@ See [DEPLOYMENT-GUIDE.md](DEPLOYMENT-GUIDE.md) for full rebuild procedures.
 
 ## Appendix: Contact Information
 
-| Role | Contact | Phone | Email |
-|------|---------|-------|-------|
-| **PKI Team Lead** | John Doe | +1-555-0100 | john.doe@contoso.com |
-| **On-Call Engineer** | 24/7 Rotation | +1-555-0911 | pki-oncall@contoso.com |
-| **Security Team** | Jane Smith | +1-555-0200 | security@contoso.com |
-| **Infrastructure Team** | Bob Johnson | +1-555-0300 | infra@contoso.com |
+**Project Maintainer:**  
+Adrian Johnson  
+Email: adrian207@gmail.com  
+GitHub: [@adrian207](https://github.com/adrian207)
 
-**Escalation Path**:
-1. On-Call Engineer (0-30 min)
-2. PKI Team Lead (30-60 min)
-3. Infrastructure Manager (60-120 min)
-4. CIO (> 2 hours or business-critical)
+**Support Channels:**
+- **General Questions**: GitHub Issues
+- **Security Concerns**: adrian207@gmail.com (Use subject: "[SECURITY] PKI-Consolidation")
+- **Bug Reports**: GitHub Issues with bug template
+- **Feature Requests**: GitHub Issues with enhancement template
+
+**Response Times:**
+- Security Issues: 24-48 hours
+- Critical Bugs: 2-5 business days
+- General Inquiries: 5-7 business days
 
 ---
 
 **Document Version**: 1.0  
 **Last Updated**: 2025-10-18  
-**Next Review**: 2026-01-18
+**Next Review**: 2026-01-18  
+**Author**: Adrian Johnson <adrian207@gmail.com>
 
