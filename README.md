@@ -76,6 +76,14 @@ docs/                             Design, deployment and operations guides
 .\tests\Invoke-AllTests.ps1
 ```
 
+## Related repositories
+
+These repositories cover different parts of PKI work:
+
+- **[EJBCA-Automated-Lab](https://github.com/adrian207/EJBCA-Automated-Lab)**: run an open-source CA (EJBCA Community Edition) on AKS to test enrolment and certificate automation
+- **[Keyfactor-CLM-Implementation](https://github.com/adrian207/Keyfactor-CLM-Implementation)**: plan and operate certificate lifecycle management on Keyfactor Command (design, runbooks, API automation examples)
+- **PKI-Consolidation** (this repository): merge two or more existing AD CS hierarchies into one, for example after an acquisition
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
