@@ -266,7 +266,8 @@ Export-ModuleMember -Alias @(
     'pkisetup'
 )
 
-# Note: Nested module functions are exported automatically via the manifest
+# Re-export nested module functions too; the manifest's FunctionsToExport decides the public list
+Export-ModuleMember -Function * -Alias *
 
 #endregion
 

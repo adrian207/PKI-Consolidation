@@ -40,14 +40,16 @@ GitHub: https://github.com/adrian207/PKI-Consolidation
 #====================#
 # CONFIG (EDIT ME)   #
 #====================#
-$Global:OutDir                 = 'C:\PKI\Consolidation'
+# Values already set by Start-PKIConsolidation (-OutDir, -DryRun, -GuardedMode, -VaultName,
+# -KeyfactorBaseUrl) are kept; otherwise these defaults apply.
+if (-not $Global:OutDir)           { $Global:OutDir           = 'C:\PKI\Consolidation' }
 $Global:AuthoritativeRootCN    = $null   # Example: 'CN=EnterpriseRootCA, O=Contoso, C=US' (else auto-propose)
-$Global:VaultName              = ''      # Azure Key Vault name (leave blank to skip)
-$Global:KeyfactorBaseUrl       = ''      # e.g. https://kf.yourco.com
+if ($null -eq $Global:VaultName)        { $Global:VaultName        = '' }  # Azure Key Vault name (blank to skip)
+if ($null -eq $Global:KeyfactorBaseUrl) { $Global:KeyfactorBaseUrl = '' }  # e.g. https://kf.yourco.com
 
 # Safety toggles
-$Global:DoDryRun               = $false  # Preview actions without executing
-$Global:GuardedMode            = $true   # Stage registry changes as a .reg patch (don't apply unless toggled)
+if ($null -eq $Global:DoDryRun)    { $Global:DoDryRun    = $false }  # Preview actions without executing
+if ($null -eq $Global:GuardedMode) { $Global:GuardedMode = $true }   # Stage registry changes as a .reg patch (don't apply unless toggled)
 $Global:ApplyGuardedChanges    = $false  # If true, 4B will apply the staged .reg after staging
 $Global:EnableVerboseLog       = $true
 $Global:EnableSecureLogging    = $true   # Use HMAC-protected logging

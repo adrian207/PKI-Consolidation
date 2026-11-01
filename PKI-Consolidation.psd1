@@ -96,6 +96,9 @@ NestedModules = @(
 FunctionsToExport = @(
     # Main workflow functions
     'Start-PKIConsolidation',
+    'Get-PKIConsolidationVersion',
+    'Test-PKIConsolidationReadiness',
+    'Initialize-PKICredentials',
     'Invoke-Phase1Audit',
     'Invoke-Phase2SelectRoot',
     'Invoke-Phase3NewSubCSR',
@@ -111,7 +114,6 @@ FunctionsToExport = @(
     # Security module functions
     'Get-PKICredential',
     'Set-PKICredential',
-    'Remove-PKICredential',
     'Test-RequiredPrivileges',
     'Set-SecureDirectoryPermissions',
     'Write-SecureLog',
